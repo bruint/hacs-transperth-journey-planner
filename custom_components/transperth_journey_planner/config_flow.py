@@ -15,7 +15,6 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
-import homeassistant.helpers.config_validation as cv
 
 from .const import (
     DOMAIN,
@@ -93,8 +92,10 @@ class TransperthJourneyPlannerConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_DEPARTURE_OPTION: user_input.get(
                         CONF_DEPARTURE_OPTION, "leave_after"
                     ),
-                    CONF_TRANSPORT_OPTIONS: user_input.get(
-                        CONF_TRANSPORT_OPTIONS, ["bus", "train"]
+                    CONF_TRANSPORT_OPTIONS: (
+                        user_input[CONF_TRANSPORT_OPTIONS]
+                        if isinstance(user_input.get(CONF_TRANSPORT_OPTIONS), list)
+                        else ["bus", "train"]
                     ),
                     CONF_WALK_SPEED: user_input.get(CONF_WALK_SPEED, "normal"),
                     CONF_MAX_CONNECTIONS: (
@@ -129,7 +130,7 @@ class TransperthJourneyPlannerConfigFlow(ConfigFlow, domain=DOMAIN):
                 ): vol.In(DEPARTURE_OPTIONS),
                 vol.Optional(
                     CONF_TRANSPORT_OPTIONS, default=["bus", "train"]
-                ): vol.All(cv.ensure_list, [vol.In(TRANSPORT_OPTIONS)]),
+                ): [vol.In(TRANSPORT_OPTIONS)],
                 vol.Optional(CONF_WALK_SPEED, default="normal"): vol.In(WALK_SPEEDS),
                 vol.Optional(CONF_MAX_CONNECTIONS, default=""): str,
                 vol.Optional(CONF_MAX_WALKING_DISTANCE, default=""): str,
