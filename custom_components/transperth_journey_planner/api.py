@@ -25,6 +25,8 @@ class JourneyLeg:
     type: str  # walk, bus, train, ferry, cat
     description: str  # e.g., "Walk 501m", "Bus 276", "Train Airport Line"
     service_code: str | None  # e.g., "276", "AIR", "MAN", "Red"
+    from_time: str | None = None  # Departure time for this leg (e.g., "08:13am")
+    to_time: str | None = None  # Arrival time for this leg (e.g., "08:34am")
 
 
 @dataclass
@@ -316,6 +318,46 @@ class TransperthAPI:
                     display_title = trip.get("DisplayTripTitle", "")
                     display_duration = trip.get("DisplayTripDuration", "")
                     
+                    # Extract timing information
+                    from_time = trip.get("DisplayTripFromTime")
+                    to_time = trip.get("DisplayTripToTime")
+                    
+                    # Also try to extract from DisplayTripDuration if available (format: "08:13am - 08:34am")
+                    if not from_time and display_duration:
+                        # Try to extract time from "08:13am - 08:34am (21 mins)"
+                        time_match = re.search(r"(\d{1,2}:\d{2}(?:am|pm))", display_duration)
+                        if time_match:
+                            from_time = time_match.group(1)
+                    
+                    if not to_time and display_duration:
+                        # Try to extract second time from "08:13am - 08:34am (21 mins)"
+                        time_matches = re.findall(r"(\d{1,2}:\d{2}(?:am|pm))", display_duration)
+                        if len(time_matches) >= 2:
+                            to_time = time_matches[1]
+                    
+                    # Convert from "0813" format to "08:13am" format if needed
+                    if from_time and len(from_time) == 4 and from_time.isdigit():
+                        # Convert "0813" to "08:13am"
+                        hour = int(from_time[:2])
+                        minute = from_time[2:]
+                        period = "am" if hour < 12 else "pm"
+                        if hour > 12:
+                            hour = hour - 12
+                        elif hour == 0:
+                            hour = 12
+                        from_time = f"{hour:02d}:{minute}{period}"
+                    
+                    if to_time and len(to_time) == 4 and to_time.isdigit():
+                        # Convert "0834" to "08:34am"
+                        hour = int(to_time[:2])
+                        minute = to_time[2:]
+                        period = "am" if hour < 12 else "pm"
+                        if hour > 12:
+                            hour = hour - 12
+                        elif hour == 0:
+                            hour = 12
+                        to_time = f"{hour:02d}:{minute}{period}"
+                    
                     # Determine leg type
                     if trip_vehicle == "walk" or "walk" in display_title.lower():
                         leg_type = "walk"
@@ -348,6 +390,8 @@ class TransperthAPI:
                             type=leg_type,
                             description=description,
                             service_code=route_code,
+                            from_time=from_time,
+                            to_time=to_time,
                         )
                     )
 

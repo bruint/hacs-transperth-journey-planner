@@ -8,16 +8,18 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+import voluptuous as vol
 
 from .const import DOMAIN
 from .coordinator import TransperthJourneyCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON]
 
 
 @dataclass
@@ -49,6 +51,56 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
     # Setup platforms
     await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
+
+    # Register services (only once, not per config entry)
+    if DOMAIN not in hass.data or "services_registered" not in hass.data[DOMAIN]:
+        async def async_refresh_data(call: ServiceCall) -> None:
+            """Service to refresh journey data for all routes or a specific route."""
+            route_name = call.data.get("route_name")
+            config_entry_id = call.data.get("config_entry_id")
+            
+            # Get all coordinators
+            coordinators: list[TransperthJourneyCoordinator] = []
+            if config_entry_id:
+                # Refresh specific config entry
+                if config_entry_id in hass.data.get(DOMAIN, {}):
+                    coordinators.append(hass.data[DOMAIN][config_entry_id].coordinator)
+            else:
+                # Refresh all config entries
+                for entry_id, runtime_data in hass.data.get(DOMAIN, {}).items():
+                    if isinstance(runtime_data, RuntimeData):
+                        coordinators.append(runtime_data.coordinator)
+            
+            if not coordinators:
+                _LOGGER.warning("No Transperth Journey Planner config entries found")
+                return
+            
+            for coordinator in coordinators:
+                if route_name:
+                    # Refresh specific route
+                    _LOGGER.info("Refreshing data for route: %s", route_name)
+                    if route_name in coordinator.routes:
+                        await coordinator.async_request_refresh()
+                    else:
+                        _LOGGER.warning("Route '%s' not found in coordinator", route_name)
+                else:
+                    # Refresh all routes for this coordinator
+                    _LOGGER.info("Refreshing data for all routes")
+                    await coordinator.async_request_refresh()
+
+        hass.services.async_register(
+            DOMAIN,
+            "refresh",
+            async_refresh_data,
+            schema=vol.Schema(
+                {
+                    vol.Optional("route_name"): cv.string,
+                    vol.Optional("config_entry_id"): cv.string,
+                }
+            ),
+        )
+        # Mark services as registered
+        hass.data.setdefault(DOMAIN, {})["services_registered"] = True
 
     return True
 

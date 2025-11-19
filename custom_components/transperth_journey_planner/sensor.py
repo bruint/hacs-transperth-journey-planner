@@ -130,6 +130,8 @@ class TransperthJourneySensor(CoordinatorEntity, SensorEntity):
                         "type": leg.type,
                         "description": leg.description,
                         "service_code": leg.service_code,
+                        "from_time": leg.from_time,
+                        "to_time": leg.to_time,
                     }
                     for leg in option.legs
                 ],

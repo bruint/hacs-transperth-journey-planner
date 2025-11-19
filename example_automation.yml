@@ -1,0 +1,120 @@
+alias: "Transperth Journey Options - 5PM Weekday Notification"
+description: "Sends a notification at 5:00 PM on weekdays with available journey options"
+trigger:
+  - platform: time
+    at: "17:00:00"
+condition:
+  - condition: time
+    weekday:
+      - mon
+      - tue
+      - wed
+      - thu
+      - fri
+action:
+  # Create a persistent notification in Home Assistant
+  - service: persistent_notification.create
+    data:
+      title: "🚌 Transperth Journey Options"
+      message: >-
+        {% set all_sensors = states.sensor | selectattr('entity_id', 'match', 'sensor.transperth.*') | list %}
+        {% set available_sensors = all_sensors | selectattr('state', 'ne', 'unavailable') | selectattr('state', 'ne', 'unknown') | selectattr('state', 'ne', 'None') | selectattr('state', 'ne', '') | list %}
+        
+        {% if available_sensors | length > 0 %}
+          {% set first_sensor = available_sensors[0] %}
+          {% set route_name = first_sensor.attributes.route_name %}
+          {% set route_sensors = available_sensors | selectattr('attributes.route_name', 'eq', route_name) | list %}
+          
+          **{{ route_name }}**
+          
+          **From:** {{ first_sensor.attributes.from_location }}
+          **To:** {{ first_sensor.attributes.to_location }}
+          
+          {% set option_strings = [] %}
+          {% for sensor in route_sensors | sort(attribute='attributes.option_index') %}
+            {% set legs = sensor.attributes.legs %}
+            {% set etd = sensor.attributes.leave_time %}
+            {% set eta = sensor.attributes.arrive_time %}
+            
+            {% if legs | length >= 2 %}
+              {% set non_walk_legs = legs | selectattr('type', 'ne', 'walk') | list %}
+              
+              {% if non_walk_legs | length >= 1 %}
+                {% set second_leg_start = non_walk_legs[0].from_time if non_walk_legs[0].from_time else '' %}
+                {% set penultimate_leg_end = non_walk_legs[-1].to_time if non_walk_legs[-1].to_time else '' %}
+                {% if second_leg_start and penultimate_leg_end %}
+                  {% set option_str = etd ~ '/' ~ second_leg_start ~ ' > ' ~ penultimate_leg_end ~ '/' ~ eta %}
+                {% else %}
+                  {% set option_str = etd ~ ' > ' ~ eta %}
+                {% endif %}
+              {% else %}
+                {% set option_str = etd ~ ' > ' ~ eta %}
+              {% endif %}
+            {% else %}
+              {% set option_str = etd ~ ' > ' ~ eta %}
+            {% endif %}
+            {% set option_strings = option_strings + [option_str] %}
+          {% endfor %}
+          {{ option_strings | join(' | ') }}
+        {% else %}
+          No journey options available at this time.
+        {% endif %}
+      notification_id: "transperth_journey_options"
+  # Send mobile notification
+  - service: notify.mobile_app_tom_b_iphone_personal
+    data:
+      title: "🚌 Transperth Journey Options"
+      message: >-
+        {% set all_sensors = states.sensor | selectattr('entity_id', 'match', 'sensor.transperth.*') | list %}
+        {% set available_sensors = all_sensors | selectattr('state', 'ne', 'unavailable') | selectattr('state', 'ne', 'unknown') | selectattr('state', 'ne', 'None') | selectattr('state', 'ne', '') | list %}
+        
+        {% if available_sensors | length > 0 %}
+          {% set first_sensor = available_sensors[0] %}
+          {% set route_name = first_sensor.attributes.route_name %}
+          {% set route_sensors = available_sensors | selectattr('attributes.route_name', 'eq', route_name) | list %}
+          
+          {% set option_strings = [] %}
+          {% for sensor in route_sensors | sort(attribute='attributes.option_index') %}
+            {% set legs = sensor.attributes.legs %}
+            {% set etd = sensor.attributes.leave_time %}
+            {% set eta = sensor.attributes.arrive_time %}
+            
+            {% if legs | length >= 2 %}
+              {% set non_walk_legs = legs | selectattr('type', 'ne', 'walk') | list %}
+              
+              {% if non_walk_legs | length >= 1 %}
+                {% set second_leg_start = non_walk_legs[0].from_time if non_walk_legs[0].from_time else '' %}
+                {% set penultimate_leg_end = non_walk_legs[-1].to_time if non_walk_legs[-1].to_time else '' %}
+                {% if second_leg_start and penultimate_leg_end %}
+                  {% set option_str = etd ~ '/' ~ second_leg_start ~ ' > ' ~ penultimate_leg_end ~ '/' ~ eta %}
+                {% else %}
+                  {% set option_str = etd ~ ' > ' ~ eta %}
+                {% endif %}
+              {% else %}
+                {% set option_str = etd ~ ' > ' ~ eta %}
+              {% endif %}
+            {% else %}
+              {% set option_str = etd ~ ' > ' ~ eta %}
+            {% endif %}
+            {% set option_strings = option_strings + [option_str] %}
+          {% endfor %}
+          {{ option_strings | join(' | ') }}
+        {% else %}
+          No journey options available at this time.
+        {% endif %}
+      data:
+        push:
+          sound:
+            name: "default"
+            critical: 0
+            volume: 1.0
+          thread-id: "transperth-journey-options"
+          category: "TRANSPERTH"
+        url: "homeassistant://navigate/config/devices/device/c229a54a8f926269ddd29b3e0db2a0ce"
+        actions:
+          - action: "URI"
+            title: "View Journey Options"
+            uri: "homeassistant://navigate/config/devices/device/c229a54a8f926269ddd29b3e0db2a0ce"
+          - action: "DISMISS"
+            title: "Dismiss"
+

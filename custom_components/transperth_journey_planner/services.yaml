@@ -1,0 +1,17 @@
+refresh:
+  name: Refresh Journey Data
+  description: Manually trigger a refresh of journey data for all routes or a specific route.
+  fields:
+    route_name:
+      name: Route Name
+      description: Optional. Name of the specific route to refresh. If not provided, all routes will be refreshed.
+      required: false
+      selector:
+        text:
+    config_entry_id:
+      name: Config Entry ID
+      description: Optional. ID of the specific config entry to refresh. If not provided, all config entries will be refreshed.
+      required: false
+      selector:
+        text:
+
