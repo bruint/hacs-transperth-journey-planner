@@ -15,6 +15,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
+import homeassistant.helpers.config_validation as cv
 
 from .const import (
     DOMAIN,
@@ -48,11 +49,6 @@ class TransperthJourneyPlannerConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    def __init__(self):
-        """Initialize the config flow."""
-        super().__init__()
-        self._routes: dict[str, dict[str, Any]] = {}
-
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
@@ -63,6 +59,9 @@ class TransperthJourneyPlannerConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle the initial step."""
+        # Initialize routes if not already done
+        if not hasattr(self, '_routes'):
+            self._routes = {}
         # Always start by adding a route
         return await self.async_step_add_route()
 
@@ -98,8 +97,15 @@ class TransperthJourneyPlannerConfigFlow(ConfigFlow, domain=DOMAIN):
                         CONF_TRANSPORT_OPTIONS, ["bus", "train"]
                     ),
                     CONF_WALK_SPEED: user_input.get(CONF_WALK_SPEED, "normal"),
-                    CONF_MAX_CONNECTIONS: user_input.get(CONF_MAX_CONNECTIONS),
-                    CONF_MAX_WALKING_DISTANCE: user_input.get(CONF_MAX_WALKING_DISTANCE),
+                    CONF_MAX_CONNECTIONS: (
+                        int(user_input[CONF_MAX_CONNECTIONS])
+                        if user_input.get(CONF_MAX_CONNECTIONS)
+                        and str(user_input.get(CONF_MAX_CONNECTIONS, "")).strip()
+                        else None
+                    ),
+                    CONF_MAX_WALKING_DISTANCE: (
+                        user_input.get(CONF_MAX_WALKING_DISTANCE) or None
+                    ),
                 }
 
                 # Ask if user wants to add another route
@@ -123,10 +129,10 @@ class TransperthJourneyPlannerConfigFlow(ConfigFlow, domain=DOMAIN):
                 ): vol.In(DEPARTURE_OPTIONS),
                 vol.Optional(
                     CONF_TRANSPORT_OPTIONS, default=["bus", "train"]
-                ): vol.All(list, vol.Length(min=1)),
+                ): vol.All(cv.ensure_list, [vol.In(TRANSPORT_OPTIONS)]),
                 vol.Optional(CONF_WALK_SPEED, default="normal"): vol.In(WALK_SPEEDS),
-                vol.Optional(CONF_MAX_CONNECTIONS): vol.Any(None, int),
-                vol.Optional(CONF_MAX_WALKING_DISTANCE): vol.Any(None, str),
+                vol.Optional(CONF_MAX_CONNECTIONS, default=""): str,
+                vol.Optional(CONF_MAX_WALKING_DISTANCE, default=""): str,
             }
         )
 
