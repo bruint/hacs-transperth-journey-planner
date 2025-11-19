@@ -12,7 +12,7 @@ from urllib.parse import urlencode
 import requests
 from bs4 import BeautifulSoup
 
-from .const import JOURNEY_PLANNER_URL
+from .const import JOURNEY_PLANNER_URL, TRANSPERTH_BASE_URL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -105,19 +105,30 @@ class TransperthAPI:
         Returns:
             JourneyData object containing journey options
         """
-        # Build query parameters
-        params: dict[str, Any] = {
-            "from": from_location,
-            "fromtype": from_type,
-            "fromposition": from_position,
-            "fromlocality": from_locality,
-            "to": to_location,
-            "totype": to_type,
-            "toposition": to_position,
-            "tolocality": to_locality,
-            "date": date,
-            "time": time,
-        }
+        # Build query parameters - ensure all required fields are present
+        params: dict[str, Any] = {}
+        
+        # Required parameters
+        if from_location:
+            params["from"] = from_location
+        if from_type:
+            params["fromtype"] = from_type
+        if from_position:
+            params["fromposition"] = from_position
+        if from_locality:
+            params["fromlocality"] = from_locality
+        if to_location:
+            params["to"] = to_location
+        if to_type:
+            params["totype"] = to_type
+        if to_position:
+            params["toposition"] = to_position
+        if to_locality:
+            params["tolocality"] = to_locality
+        if date:
+            params["date"] = date
+        if time:
+            params["time"] = time
 
         # Add departure option
         if departure_option == "leave_after":
@@ -128,9 +139,12 @@ class TransperthAPI:
             params["departureOption"] = "EarliestTrip"
         elif departure_option == "last_trip":
             params["departureOption"] = "LastTrip"
+        else:
+            # Default to LeaveAfter if not specified
+            params["departureOption"] = "LeaveAfter"
 
-        # Add transport options
-        if transport_options:
+        # Add transport options - at least one is required
+        if transport_options and len(transport_options) > 0:
             if "bus" in transport_options:
                 params["bus"] = "on"
             if "train" in transport_options:
@@ -139,6 +153,10 @@ class TransperthAPI:
                 params["ferry"] = "on"
             if "school_bus" in transport_options:
                 params["schoolbus"] = "on"
+        else:
+            # Default to bus and train if none specified
+            params["bus"] = "on"
+            params["train"] = "on"
 
         # Add walk speed
         if walk_speed == "slow":
@@ -159,10 +177,36 @@ class TransperthAPI:
         if max_walking_distance:
             params["maxWalkingDistance"] = max_walking_distance
 
+        # Validate required parameters
+        required_params = ["from", "to", "fromposition", "toposition"]
+        missing_params = [p for p in required_params if not params.get(p)]
+        if missing_params:
+            _LOGGER.error("Missing required parameters: %s", missing_params)
+            raise ValueError(f"Missing required parameters: {missing_params}")
+        
+        # Ensure at least one transport option is selected
+        transport_params = ["bus", "train", "ferry", "schoolbus"]
+        has_transport = any(params.get(p) == "on" for p in transport_params)
+        if not has_transport:
+            _LOGGER.warning("No transport options specified, defaulting to bus and train")
+            params["bus"] = "on"
+            params["train"] = "on"
+
         try:
             # Make request - ensure proper URL encoding
             _LOGGER.debug("Requesting journey options with params: %s", params)
-            response = self.session.get(JOURNEY_PLANNER_URL, params=params, timeout=30)
+            
+            # Add Referer header to make request look more legitimate
+            headers = {
+                "Referer": f"{TRANSPERTH_BASE_URL}/Journey-Planner",
+            }
+            
+            response = self.session.get(
+                JOURNEY_PLANNER_URL,
+                params=params,
+                headers=headers,
+                timeout=30
+            )
             response.raise_for_status()
             
             _LOGGER.debug("Response status: %s, URL: %s", response.status_code, response.url)
