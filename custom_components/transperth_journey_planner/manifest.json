@@ -1,7 +1,7 @@
 {
   "domain": "transperth_journey_planner",
   "name": "Transperth Journey Planner",
-  "codeowners": ["@yourusername"],
+  "codeowners": ["@bruint"],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/yourusername/hacs-transperth-journey-planner",
