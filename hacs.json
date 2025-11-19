@@ -1,0 +1,7 @@
+{
+  "name": "Transperth Journey Planner",
+  "render_readme": true,
+  "country": ["AU"],
+  "homeassistant": "2023.1.0"
+}
+

@@ -1,0 +1,34 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Transperth Journey Planner",
+        "description": "Configure your journey routes"
+      },
+      "add_route": {
+        "title": "Add Journey Route",
+        "description": "Configure a journey route"
+      },
+      "add_another": {
+        "title": "Add Another Route?",
+        "description": "You have configured {route_count} route(s): {routes}\n\nWould you like to add another route?"
+      }
+    },
+    "error": {
+      "required": "This field is required",
+      "duplicate": "A route with this name already exists"
+    },
+    "abort": {
+      "already_configured": "Integration is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Transperth Journey Planner Options",
+        "description": "Configure update interval"
+      }
+    }
+  }
+}
+
