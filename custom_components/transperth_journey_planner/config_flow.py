@@ -199,7 +199,6 @@ class TransperthJourneyPlannerConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({
                 vol.Required("journey_url"): str,
             }),
-            description="Paste a Transperth Journey Planner URL to automatically fill in the route details.",
             errors=errors,
         )
 
