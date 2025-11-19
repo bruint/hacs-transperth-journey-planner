@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from dataclasses import dataclass
@@ -12,7 +13,7 @@ from urllib.parse import urlencode
 import requests
 from bs4 import BeautifulSoup
 
-from .const import JOURNEY_PLANNER_URL, TRANSPERTH_BASE_URL
+from .const import JOURNEY_PLANNER_API_URL, JOURNEY_PLANNER_URL, TRANSPERTH_BASE_URL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,14 +57,71 @@ class TransperthAPI:
         self.session = requests.Session()
         self.session.headers.update(
             {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9",
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "Accept-Language": "en-GB,en;q=0.6",
                 "Accept-Encoding": "gzip, deflate, br",
                 "Connection": "keep-alive",
-                "Upgrade-Insecure-Requests": "1",
+                "Cache-Control": "no-cache",
+                "Pragma": "no-cache",
+                "Sec-Fetch-Dest": "empty",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "same-origin",
+                "X-Requested-With": "XMLHttpRequest",
             }
         )
+        self._request_verification_token: str | None = None
+        self._module_id: str | None = None
+        self._tab_id: str | None = None
+
+    def _get_session_tokens(self) -> None:
+        """Get RequestVerificationToken and other session tokens from the Journey Planner page."""
+        try:
+            # Visit the Journey Planner page to get cookies and tokens
+            response = self.session.get(
+                f"{TRANSPERTH_BASE_URL}/Journey-Planner",
+                timeout=10
+            )
+            response.raise_for_status()
+            
+            # Parse HTML to find RequestVerificationToken
+            soup = BeautifulSoup(response.text, "lxml")
+            
+            # Find the RequestVerificationToken input
+            token_input = soup.find("input", {"name": "__RequestVerificationToken"})
+            if token_input:
+                self._request_verification_token = token_input.get("value")
+                _LOGGER.debug("Found RequestVerificationToken")
+            
+            # Try to find ModuleId and TabId from script tags or data attributes
+            # These might be in JavaScript variables or data attributes
+            scripts = soup.find_all("script")
+            for script in scripts:
+                if script.string:
+                    # Look for ModuleId
+                    module_match = re.search(r'ModuleId["\']?\s*[:=]\s*["\']?(\d+)', script.string)
+                    if module_match:
+                        self._module_id = module_match.group(1)
+                        _LOGGER.debug("Found ModuleId: %s", self._module_id)
+                    
+                    # Look for TabId
+                    tab_match = re.search(r'TabId["\']?\s*[:=]\s*["\']?(\d+)', script.string)
+                    if tab_match:
+                        self._tab_id = tab_match.group(1)
+                        _LOGGER.debug("Found TabId: %s", self._tab_id)
+            
+            # Default values if not found
+            if not self._module_id:
+                self._module_id = "5325"  # Default from curl example
+            if not self._tab_id:
+                self._tab_id = "140"  # Default from curl example
+                
+        except Exception as e:
+            _LOGGER.warning("Could not get session tokens: %s", e)
+            # Use defaults
+            self._request_verification_token = None
+            self._module_id = "5325"
+            self._tab_id = "140"
 
     def get_journey_options(
         self,
@@ -83,7 +141,7 @@ class TransperthAPI:
         max_connections: int | None = None,
         max_walking_distance: str | None = None,
     ) -> JourneyData:
-        """Fetch journey options from Transperth Journey Planner.
+        """Fetch journey options from Transperth Journey Planner using JSON API.
 
         Args:
             from_location: Starting location
@@ -99,183 +157,117 @@ class TransperthAPI:
             departure_option: "leave_after", "arrive_by", "earliest_trip", or "last_trip"
             transport_options: List of transport types to include
             walk_speed: "slow", "normal", or "fast"
-            max_connections: Maximum number of connections
-            max_walking_distance: Maximum walking distance (e.g., "300m", "600m")
+            max_connections: Maximum number of connections (-1 for unlimited)
+            max_walking_distance: Maximum walking distance in meters (e.g., "2000")
 
         Returns:
             JourneyData object containing journey options
         """
-        # Build query parameters - ensure all required fields are present
-        params: dict[str, Any] = {}
-        
-        # Log input values for debugging
-        _LOGGER.warning("API called with: from_location='%s', to_location='%s', from_position='%s', to_position='%s'", 
-                       from_location, to_location, from_position, to_position)
-        
-        # Required parameters - check for empty strings too
-        if from_location and from_location.strip():
-            params["from"] = from_location.strip()
-        else:
-            _LOGGER.error("from_location is empty or None: '%s'", from_location)
-            
-        if from_type and from_type.strip():
-            params["fromtype"] = from_type.strip()
-        if from_position and from_position.strip():
-            params["fromposition"] = from_position.strip()
-        else:
-            _LOGGER.error("from_position is empty or None: '%s'", from_position)
-            
-        if from_locality and from_locality.strip():
-            params["fromlocality"] = from_locality.strip()
-        if to_location and to_location.strip():
-            params["to"] = to_location.strip()
-        else:
-            _LOGGER.error("to_location is empty or None: '%s'", to_location)
-            
-        if to_type and to_type.strip():
-            params["totype"] = to_type.strip()
-        if to_position and to_position.strip():
-            params["toposition"] = to_position.strip()
-        else:
-            _LOGGER.error("to_position is empty or None: '%s'", to_position)
-            
-        if to_locality and to_locality.strip():
-            params["tolocality"] = to_locality.strip()
-        if date and date.strip():
-            params["date"] = date.strip()
-        if time and time.strip():
-            params["time"] = time.strip()
-
-        # Add departure option
-        if departure_option == "leave_after":
-            params["departureOption"] = "LeaveAfter"
-        elif departure_option == "arrive_by":
-            params["departureOption"] = "ArriveBy"
-        elif departure_option == "earliest_trip":
-            params["departureOption"] = "EarliestTrip"
-        elif departure_option == "last_trip":
-            params["departureOption"] = "LastTrip"
-        else:
-            # Default to LeaveAfter if not specified
-            params["departureOption"] = "LeaveAfter"
-
-        # Add transport options - at least one is required
-        if transport_options and len(transport_options) > 0:
-            if "bus" in transport_options:
-                params["bus"] = "on"
-            if "train" in transport_options:
-                params["train"] = "on"
-            if "ferry" in transport_options:
-                params["ferry"] = "on"
-            if "school_bus" in transport_options:
-                params["schoolbus"] = "on"
-        else:
-            # Default to bus and train if none specified
-            params["bus"] = "on"
-            params["train"] = "on"
-
-        # Add walk speed
-        if walk_speed == "slow":
-            params["walkSpeed"] = "Slow"
-        elif walk_speed == "normal":
-            params["walkSpeed"] = "Normal"
-        elif walk_speed == "fast":
-            params["walkSpeed"] = "Fast"
-
-        # Add max connections
-        if max_connections is not None:
-            if max_connections == 0:
-                params["maxConnections"] = "Direct"
-            else:
-                params["maxConnections"] = str(max_connections)
-
-        # Add max walking distance
-        if max_walking_distance:
-            params["maxWalkingDistance"] = max_walking_distance
-
         # Validate required parameters
-        required_params = ["from", "to", "fromposition", "toposition"]
-        missing_params = [p for p in required_params if not params.get(p)]
-        if missing_params:
-            _LOGGER.error("Missing required parameters: %s", missing_params)
-            raise ValueError(f"Missing required parameters: {missing_params}")
+        if not from_location or not from_location.strip():
+            raise ValueError("from_location is required")
+        if not to_location or not to_location.strip():
+            raise ValueError("to_location is required")
+        if not from_position or not from_position.strip():
+            raise ValueError("from_position is required")
+        if not to_position or not to_position.strip():
+            raise ValueError("to_position is required")
         
-        # Ensure at least one transport option is selected
-        transport_params = ["bus", "train", "ferry", "schoolbus"]
-        has_transport = any(params.get(p) == "on" for p in transport_params)
-        if not has_transport:
-            _LOGGER.warning("No transport options specified, defaulting to bus and train")
-            params["bus"] = "on"
-            params["train"] = "on"
-
+        # Get session tokens
+        self._get_session_tokens()
+        
+        # Build JSON payload
+        payload: dict[str, Any] = {
+            "FromLocationName": from_location.strip(),
+            "FromLocationType": from_type.strip() if from_type else "psma_addresses",
+            "FromLocationPosition": from_position.strip(),
+            "ToLocationName": to_location.strip(),
+            "ToLocationType": to_type.strip() if to_type else "psma_addresses",
+            "ToLocationPosition": to_position.strip(),
+            "JourneyDate": date.strip() if date else "",
+            "JourneyTime": time.strip() if time else "",
+        }
+        
+        # Add optional fields
+        if from_locality and from_locality.strip():
+            payload["FromLocationLocality"] = from_locality.strip()
+        if to_locality and to_locality.strip():
+            payload["ToLocationLocality"] = to_locality.strip()
+        
+        # Transport options
+        payload["TransportBus"] = "bus" in (transport_options or [])
+        payload["TransportTrain"] = "train" in (transport_options or [])
+        payload["TransportFerry"] = "ferry" in (transport_options or [])
+        payload["TransportSchoolBus"] = "school_bus" in (transport_options or [])
+        
+        # Default to bus and train if none specified
+        if not any([payload["TransportBus"], payload["TransportTrain"], payload["TransportFerry"], payload["TransportSchoolBus"]]):
+            payload["TransportBus"] = True
+            payload["TransportTrain"] = True
+        
+        # Walk speed
+        walk_speed_map = {"slow": "SLOW", "normal": "NORMAL", "fast": "FAST"}
+        payload["WalkSpeed"] = walk_speed_map.get(walk_speed, "NORMAL")
+        
+        # Max connections (-1 for unlimited, or specific number)
+        if max_connections is not None:
+            payload["MaxConnections"] = str(max_connections)
+        else:
+            payload["MaxConnections"] = "-1"
+        
+        # Max walking distance (default 2000m from example)
+        if max_walking_distance:
+            # Remove 'm' suffix if present
+            distance = max_walking_distance.replace("m", "").replace("M", "").strip()
+            payload["MaxWalkingDistance"] = distance
+        else:
+            payload["MaxWalkingDistance"] = "2000"
+        
+        # Additional fields from example
+        payload["ReturnNotes"] = True
+        payload["ReturnNoteCodes"] = "DV,LM,CM,JC,TC,BG,FG,LK"
+        payload["MaxJourneys"] = "5"
+        
         try:
-            # First, visit the main journey planner page to establish a session
-            # This might be required for the site to work properly
-            try:
-                _LOGGER.debug("Establishing session by visiting main page")
-                self.session.get(
-                    f"{TRANSPERTH_BASE_URL}/Journey-Planner",
-                    timeout=10
-                )
-            except Exception as e:
-                _LOGGER.debug("Could not visit main page (non-critical): %s", e)
-            
-            # Make request - ensure proper URL encoding
-            _LOGGER.warning("Requesting journey options with params: %s", params)
-            # Build URL manually to see what's being sent
-            param_string = "&".join([f"{k}={v}" for k, v in params.items()])
-            _LOGGER.warning("Full URL will be: %s?%s", JOURNEY_PLANNER_URL, param_string)
-            
-            # Add Referer header to make request look more legitimate
+            # Build headers
             headers = {
+                "Content-Type": "application/json; charset=UTF-8",
                 "Referer": f"{TRANSPERTH_BASE_URL}/Journey-Planner",
+                "Origin": TRANSPERTH_BASE_URL,
             }
             
-            response = self.session.get(
-                JOURNEY_PLANNER_URL,
-                params=params,
+            if self._request_verification_token:
+                headers["RequestVerificationToken"] = self._request_verification_token
+            
+            if self._module_id:
+                headers["ModuleId"] = self._module_id
+            
+            if self._tab_id:
+                headers["TabId"] = self._tab_id
+            
+            _LOGGER.debug("Making POST request to JSON API with payload: %s", json.dumps(payload, indent=2))
+            
+            # Make POST request
+            response = self.session.post(
+                JOURNEY_PLANNER_API_URL,
+                json=payload,
                 headers=headers,
                 timeout=30
             )
             response.raise_for_status()
             
-            _LOGGER.warning("Response status: %s, URL: %s", response.status_code, response.url)
-            # Check if parameters are in the actual URL
-            url_str = str(response.url)
-            _LOGGER.warning("URL contains 'from=': %s", "from=" in url_str)
-            _LOGGER.warning("URL contains 'to=': %s", "to=" in url_str)
-            _LOGGER.warning("URL contains 'bus=': %s", "bus=" in url_str)
-
-            # Parse HTML
-            soup = BeautifulSoup(response.text, "lxml")
+            # Parse JSON response
+            data = response.json()
             
-            # Check if we got redirected or got an error page
-            page_title = soup.find("title")
-            if page_title:
-                title_text = page_title.get_text(strip=True)
-                _LOGGER.debug("Page title: %s", title_text)
-                if "error" in title_text.lower() or "not found" in title_text.lower():
-                    _LOGGER.warning("Possible error page detected: %s", title_text)
+            if data.get("result") != "success":
+                _LOGGER.error("API returned error: %s", data)
+                raise ValueError(f"API error: {data.get('result', 'unknown')}")
             
-            options = self._parse_journey_options(soup)
+            # Parse journey options from JSON
+            options = self._parse_json_journey_options(data.get("data", []))
             
-            if not options:
-                _LOGGER.warning("No journey options found. Response length: %d bytes", len(response.text))
-                # Check if the response contains the error messages we're seeing
-                response_lower = response.text.lower()
-                if "please specify where the journey starts" in response_lower:
-                    _LOGGER.error("Page indicates 'from' parameter is missing. Check if parameters are being sent correctly.")
-                    _LOGGER.debug("Actual request URL: %s", response.url)
-                if "please specify where the journey ends" in response_lower:
-                    _LOGGER.error("Page indicates 'to' parameter is missing. Check if parameters are being sent correctly.")
-                if "please specify at least one transport option" in response_lower:
-                    _LOGGER.error("Page indicates transport options are missing. Check if parameters are being sent correctly.")
-                # Save a snippet of the HTML for debugging (first 2000 chars)
-                _LOGGER.debug("HTML snippet: %s", response.text[:2000])
-                # Also check if the parameters are actually in the URL
-                _LOGGER.debug("Request URL contains 'from': %s", "from=" in response.url)
-                _LOGGER.debug("Request URL contains 'to': %s", "to=" in response.url)
-
+            _LOGGER.debug("Found %d journey options", len(options))
+            
             return JourneyData(
                 options=options,
                 from_location=from_location,
@@ -287,9 +279,93 @@ class TransperthAPI:
         except requests.RequestException as err:
             _LOGGER.error("Error fetching journey options: %s", err)
             raise
-        except Exception as err:
-            _LOGGER.error("Error parsing journey options: %s", err)
+        except json.JSONDecodeError as err:
+            _LOGGER.error("Error parsing JSON response: %s", err)
+            _LOGGER.debug("Response text: %s", response.text[:1000])
             raise
+        except Exception as err:
+            _LOGGER.error("Error processing journey options: %s", err)
+            raise
+
+    def _parse_json_journey_options(self, journeys: list[dict[str, Any]]) -> list[JourneyOption]:
+        """Parse journey options from JSON API response.
+
+        Args:
+            journeys: List of journey dictionaries from the API response
+
+        Returns:
+            List of JourneyOption objects
+        """
+        options: list[JourneyOption] = []
+
+        for journey in journeys:
+            try:
+                # Extract basic journey info
+                leave_time = journey.get("JnyDisplayDepartTime", "")
+                arrive_time = journey.get("JnyDisplayArriveTime", "")
+                travel_time = journey.get("JnyDuration", "")
+                journey_number = journey.get("JnyNumber", 0)
+
+                # Parse trip details into legs
+                legs: list[JourneyLeg] = []
+                trip_details = journey.get("JnyTripDetails", [])
+                
+                for trip in trip_details:
+                    trip_vehicle = trip.get("TripVehicle", "").lower()
+                    route_code = trip.get("RouteCode")
+                    display_title = trip.get("DisplayTripTitle", "")
+                    display_duration = trip.get("DisplayTripDuration", "")
+                    
+                    # Determine leg type
+                    if trip_vehicle == "walk" or "walk" in display_title.lower():
+                        leg_type = "walk"
+                    elif trip_vehicle == "bus" or "bus" in display_title.lower():
+                        leg_type = "bus"
+                    elif trip_vehicle == "train" or "train" in display_title.lower():
+                        leg_type = "train"
+                    elif trip_vehicle == "ferry" or "ferry" in display_title.lower():
+                        leg_type = "ferry"
+                    elif "cat" in display_title.lower():
+                        leg_type = "cat"
+                    else:
+                        leg_type = "walk"  # default
+                    
+                    # Build description
+                    description_parts = []
+                    if route_code:
+                        description_parts.append(route_code)
+                    if display_title:
+                        # Clean up the title
+                        title = display_title.replace("Catch ", "").replace("Walk to ", "").replace("Walk ", "")
+                        description_parts.append(title)
+                    if display_duration:
+                        description_parts.append(f"({display_duration})")
+                    
+                    description = " ".join(description_parts) if description_parts else display_title or trip_vehicle
+                    
+                    legs.append(
+                        JourneyLeg(
+                            type=leg_type,
+                            description=description,
+                            service_code=route_code,
+                        )
+                    )
+
+                options.append(
+                    JourneyOption(
+                        leave_time=leave_time,
+                        arrive_time=arrive_time,
+                        travel_time=travel_time,
+                        legs=legs,
+                        index=journey_number,
+                    )
+                )
+
+            except Exception as err:
+                _LOGGER.warning("Error parsing journey option: %s", err)
+                continue
+
+        return options
 
     def _parse_journey_options(self, soup: BeautifulSoup) -> list[JourneyOption]:
         """Parse journey options from HTML.

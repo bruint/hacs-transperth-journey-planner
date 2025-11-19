@@ -23,6 +23,7 @@ CONF_MAX_WALKING_DISTANCE = "max_walking_distance"
 
 TRANSPERTH_BASE_URL = "https://www.transperth.wa.gov.au"
 JOURNEY_PLANNER_URL = f"{TRANSPERTH_BASE_URL}/Journey-Planner/Results"
+JOURNEY_PLANNER_API_URL = f"{TRANSPERTH_BASE_URL}/API/SilverRailRestService/SilverRailService/PlanJourney"
 
 DEPARTURE_OPTIONS = ["leave_after", "arrive_by", "earliest_trip", "last_trip"]
 WALK_SPEEDS = ["slow", "normal", "fast"]
