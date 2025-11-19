@@ -56,7 +56,12 @@ class TransperthAPI:
         self.session = requests.Session()
         self.session.headers.update(
             {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
             }
         )
 
@@ -155,13 +160,30 @@ class TransperthAPI:
             params["maxWalkingDistance"] = max_walking_distance
 
         try:
-            # Make request
+            # Make request - ensure proper URL encoding
+            _LOGGER.debug("Requesting journey options with params: %s", params)
             response = self.session.get(JOURNEY_PLANNER_URL, params=params, timeout=30)
             response.raise_for_status()
+            
+            _LOGGER.debug("Response status: %s, URL: %s", response.status_code, response.url)
 
             # Parse HTML
             soup = BeautifulSoup(response.text, "lxml")
+            
+            # Check if we got redirected or got an error page
+            page_title = soup.find("title")
+            if page_title:
+                title_text = page_title.get_text(strip=True)
+                _LOGGER.debug("Page title: %s", title_text)
+                if "error" in title_text.lower() or "not found" in title_text.lower():
+                    _LOGGER.warning("Possible error page detected: %s", title_text)
+            
             options = self._parse_journey_options(soup)
+            
+            if not options:
+                _LOGGER.warning("No journey options found. Response length: %d bytes", len(response.text))
+                # Save a snippet of the HTML for debugging (first 2000 chars)
+                _LOGGER.debug("HTML snippet: %s", response.text[:2000])
 
             return JourneyData(
                 options=options,
@@ -189,10 +211,28 @@ class TransperthAPI:
         """
         options: list[JourneyOption] = []
 
-        # Find the journey options table
+        # Find the journey options table - try multiple selectors
         table = soup.find("table", id="jrne-opt-tbl")
         if not table:
-            _LOGGER.warning("Journey options table not found")
+            # Try alternative selector
+            table = soup.find("table", class_="jrne-opt-tbl")
+        if not table:
+            # Try finding by caption text
+            tables = soup.find_all("table")
+            for tbl in tables:
+                caption = tbl.find("caption")
+                if caption and "Journey Options" in caption.get_text():
+                    table = tbl
+                    break
+        
+        if not table:
+            _LOGGER.warning("Journey options table not found. Checking for error messages...")
+            # Check for common error indicators
+            error_divs = soup.find_all(["div", "p"], class_=re.compile(r"error|alert|warning", re.I))
+            for err in error_divs:
+                err_text = err.get_text(strip=True)
+                if err_text:
+                    _LOGGER.warning("Possible error message: %s", err_text)
             return options
 
         # Find all table rows (skip header)
