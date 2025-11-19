@@ -193,8 +193,20 @@ class TransperthAPI:
             params["train"] = "on"
 
         try:
+            # First, visit the main journey planner page to establish a session
+            # This might be required for the site to work properly
+            try:
+                _LOGGER.debug("Establishing session by visiting main page")
+                self.session.get(
+                    f"{TRANSPERTH_BASE_URL}/Journey-Planner",
+                    timeout=10
+                )
+            except Exception as e:
+                _LOGGER.debug("Could not visit main page (non-critical): %s", e)
+            
             # Make request - ensure proper URL encoding
             _LOGGER.debug("Requesting journey options with params: %s", params)
+            _LOGGER.debug("Full URL will be: %s?%s", JOURNEY_PLANNER_URL, "&".join([f"{k}={v}" for k, v in params.items()]))
             
             # Add Referer header to make request look more legitimate
             headers = {
@@ -210,6 +222,7 @@ class TransperthAPI:
             response.raise_for_status()
             
             _LOGGER.debug("Response status: %s, URL: %s", response.status_code, response.url)
+            _LOGGER.debug("Response headers: %s", dict(response.headers))
 
             # Parse HTML
             soup = BeautifulSoup(response.text, "lxml")
@@ -226,8 +239,20 @@ class TransperthAPI:
             
             if not options:
                 _LOGGER.warning("No journey options found. Response length: %d bytes", len(response.text))
+                # Check if the response contains the error messages we're seeing
+                response_lower = response.text.lower()
+                if "please specify where the journey starts" in response_lower:
+                    _LOGGER.error("Page indicates 'from' parameter is missing. Check if parameters are being sent correctly.")
+                    _LOGGER.debug("Actual request URL: %s", response.url)
+                if "please specify where the journey ends" in response_lower:
+                    _LOGGER.error("Page indicates 'to' parameter is missing. Check if parameters are being sent correctly.")
+                if "please specify at least one transport option" in response_lower:
+                    _LOGGER.error("Page indicates transport options are missing. Check if parameters are being sent correctly.")
                 # Save a snippet of the HTML for debugging (first 2000 chars)
                 _LOGGER.debug("HTML snippet: %s", response.text[:2000])
+                # Also check if the parameters are actually in the URL
+                _LOGGER.debug("Request URL contains 'from': %s", "from=" in response.url)
+                _LOGGER.debug("Request URL contains 'to': %s", "to=" in response.url)
 
             return JourneyData(
                 options=options,
