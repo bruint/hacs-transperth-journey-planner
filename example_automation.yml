@@ -1,9 +1,9 @@
-alias: "Transperth Journey Options - 5PM Weekday Notification"
-description: "Sends a notification at 5:00 PM on weekdays with available journey options"
-trigger:
-  - platform: time
-    at: "17:00:00"
-condition:
+alias: Transperth Journey Options - 5PM Weekday Notification
+description: Sends a notification at 5:00 PM on weekdays with available journey options
+triggers:
+  - at: "17:00:00"
+    trigger: time
+conditions:
   - condition: time
     weekday:
       - mon
@@ -11,110 +11,375 @@ condition:
       - wed
       - thu
       - fri
-action:
-  # Create a persistent notification in Home Assistant
-  - service: persistent_notification.create
-    data:
-      title: "🚌 Transperth Journey Options"
-      message: >-
-        {% set all_sensors = states.sensor | selectattr('entity_id', 'match', 'sensor.transperth.*') | list %}
-        {% set available_sensors = all_sensors | selectattr('state', 'ne', 'unavailable') | selectattr('state', 'ne', 'unknown') | selectattr('state', 'ne', 'None') | selectattr('state', 'ne', '') | list %}
-        
-        {% if available_sensors | length > 0 %}
-          {% set first_sensor = available_sensors[0] %}
-          {% set route_name = first_sensor.attributes.route_name %}
-          {% set route_sensors = available_sensors | selectattr('attributes.route_name', 'eq', route_name) | list %}
-          
-          **{{ route_name }}**
-          
-          **From:** {{ first_sensor.attributes.from_location }}
-          **To:** {{ first_sensor.attributes.to_location }}
-          
-          {% set option_strings = [] %}
-          {% for sensor in route_sensors | sort(attribute='attributes.option_index') %}
-            {% set legs = sensor.attributes.legs %}
-            {% set etd = sensor.attributes.leave_time %}
-            {% set eta = sensor.attributes.arrive_time %}
-            
-            {% if legs | length >= 2 %}
-              {% set non_walk_legs = legs | selectattr('type', 'ne', 'walk') | list %}
-              
-              {% if non_walk_legs | length >= 1 %}
-                {% set second_leg_start = non_walk_legs[0].from_time if non_walk_legs[0].from_time else '' %}
-                {% set penultimate_leg_end = non_walk_legs[-1].to_time if non_walk_legs[-1].to_time else '' %}
-                {% if second_leg_start and penultimate_leg_end %}
-                  {% set option_str = etd ~ '/' ~ second_leg_start ~ ' > ' ~ penultimate_leg_end ~ '/' ~ eta %}
-                {% else %}
-                  {% set option_str = etd ~ ' > ' ~ eta %}
-                {% endif %}
-              {% else %}
-                {% set option_str = etd ~ ' > ' ~ eta %}
-              {% endif %}
-            {% else %}
-              {% set option_str = etd ~ ' > ' ~ eta %}
-            {% endif %}
-            {% set option_strings = option_strings + [option_str] %}
-          {% endfor %}
-          {{ option_strings | join(' | ') }}
+actions:
+  - data:
+      title: >-
+        {% set all_sensors = states.sensor | selectattr('entity_id', 'match',
+        'sensor.transperth.*') | list %} {% set available_sensors = all_sensors
+        | selectattr('state', 'ne', 'unavailable') | selectattr('state', 'ne',
+        'unknown') | selectattr('state', 'ne', 'None') | selectattr('state',
+        'ne', '') | list %} {% set target_device_id =
+        'c229a54a8f926269ddd29b3e0db2a0ce' %} {% set target_entities =
+        device_entities(target_device_id) | default([]) %} {% set
+        device_filtered = [] %} {% for sensor in available_sensors %}
+          {% if sensor.entity_id in target_entities %}
+            {% set device_filtered = device_filtered + [sensor] %}
+          {% endif %}
+        {% endfor %} {% if device_filtered | length > 0 %}
+          {% set available_sensors = device_filtered %}
+        {% endif %} {% set target_device_id = 'c229a54a8f926269ddd29b3e0db2a0ce'
+        %} {% set target_entities = device_entities(target_device_id) |
+        default([]) %} {% set device_filtered = [] %} {% for sensor in
+        available_sensors %}
+          {% if sensor.entity_id in target_entities %}
+            {% set device_filtered = device_filtered + [sensor] %}
+          {% endif %}
+        {% endfor %} {% if device_filtered | length > 0 %}
+          {% set available_sensors = device_filtered %}
+        {% endif %} {% set preferred_route_name = 'Work to Home' %} {% if
+        available_sensors | length > 0 %}
+          {% set preferred_route_sensors = available_sensors | selectattr('attributes.route_name', 'eq', preferred_route_name) | list %}
+          {% if preferred_route_sensors | length > 0 %}
+            {% set first_sensor = preferred_route_sensors[0] %}
+          {% else %}
+            {% set first_sensor = available_sensors[0] %}
+          {% endif %}
+          🚌 {{ first_sensor.attributes.route_name }}
         {% else %}
-          No journey options available at this time.
+          🚌 Transperth Journey Options
         {% endif %}
-      notification_id: "transperth_journey_options"
-  # Send mobile notification
-  - service: notify.mobile_app_tom_b_iphone_personal
-    data:
-      title: "🚌 Transperth Journey Options"
       message: >-
-        {% set all_sensors = states.sensor | selectattr('entity_id', 'match', 'sensor.transperth.*') | list %}
-        {% set available_sensors = all_sensors | selectattr('state', 'ne', 'unavailable') | selectattr('state', 'ne', 'unknown') | selectattr('state', 'ne', 'None') | selectattr('state', 'ne', '') | list %}
-        
-        {% if available_sensors | length > 0 %}
-          {% set first_sensor = available_sensors[0] %}
-          {% set route_name = first_sensor.attributes.route_name %}
-          {% set route_sensors = available_sensors | selectattr('attributes.route_name', 'eq', route_name) | list %}
-          
-          {% set option_strings = [] %}
-          {% for sensor in route_sensors | sort(attribute='attributes.option_index') %}
-            {% set legs = sensor.attributes.legs %}
-            {% set etd = sensor.attributes.leave_time %}
-            {% set eta = sensor.attributes.arrive_time %}
-            
-            {% if legs | length >= 2 %}
-              {% set non_walk_legs = legs | selectattr('type', 'ne', 'walk') | list %}
-              
-              {% if non_walk_legs | length >= 1 %}
-                {% set second_leg_start = non_walk_legs[0].from_time if non_walk_legs[0].from_time else '' %}
-                {% set penultimate_leg_end = non_walk_legs[-1].to_time if non_walk_legs[-1].to_time else '' %}
-                {% if second_leg_start and penultimate_leg_end %}
-                  {% set option_str = etd ~ '/' ~ second_leg_start ~ ' > ' ~ penultimate_leg_end ~ '/' ~ eta %}
-                {% else %}
-                  {% set option_str = etd ~ ' > ' ~ eta %}
-                {% endif %}
-              {% else %}
-                {% set option_str = etd ~ ' > ' ~ eta %}
-              {% endif %}
-            {% else %}
-              {% set option_str = etd ~ ' > ' ~ eta %}
-            {% endif %}
-            {% set option_strings = option_strings + [option_str] %}
-          {% endfor %}
-          {{ option_strings | join(' | ') }}
+        {%- set all_sensors = states.sensor | selectattr('entity_id', 'match',
+        'sensor.transperth.*') | list -%} {%- set available_sensors =
+        all_sensors | selectattr('state', 'ne', 'unavailable') |
+        selectattr('state', 'ne', 'unknown') | selectattr('state', 'ne', 'None')
+        | selectattr('state', 'ne', '') | list -%} {%- set target_device_id =
+        'c229a54a8f926269ddd29b3e0db2a0ce' -%} {%- set target_entities =
+        device_entities(target_device_id) | default([]) -%} {%- set
+        device_filtered = [] -%} {%- for sensor in available_sensors -%}
+          {%- if sensor.entity_id in target_entities -%}
+            {%- set device_filtered = device_filtered + [sensor] -%}
+          {%- endif -%}
+        {%- endfor -%} {%- if device_filtered | length > 0 -%}
+          {%- set available_sensors = device_filtered -%}
+        {%- endif -%} {%- set target_device_id =
+        'c229a54a8f926269ddd29b3e0db2a0ce' -%} {%- set target_entities =
+        device_entities(target_device_id) | default([]) -%} {%- set
+        device_filtered = [] -%} {%- for sensor in available_sensors -%}
+          {%- if sensor.entity_id in target_entities -%}
+            {%- set device_filtered = device_filtered + [sensor] -%}
+          {%- endif -%}
+        {%- endfor -%} {%- if device_filtered | length > 0 -%}
+          {%- set available_sensors = device_filtered -%}
+        {%- endif -%} {%- set preferred_route_name = 'Work to Home' -%} {%- if
+        available_sensors | length > 0 -%}
+          {%- set preferred_route_sensors = available_sensors | selectattr('attributes.route_name', 'eq', preferred_route_name) | list -%}
+          {%- if preferred_route_sensors | length > 0 -%}
+            {%- set first_sensor = preferred_route_sensors[0] -%}
+          {%- else -%}
+            {%- set first_sensor = available_sensors[0] -%}
+          {%- endif -%}
+          {%- set target_route = first_sensor.attributes.route_name -%}
+          {%- set sorted_sensors = available_sensors | sort(attribute='attributes.option_index') | list -%}
+          {%- set first_match = true -%}
+          {%- for sensor in sorted_sensors -%}
+            {%- if sensor.attributes.route_name == target_route -%}
+              {%- set etd_raw = sensor.attributes.leave_time | default('') | replace('am', '') | replace('pm', '') -%}
+              {%- set etd = etd_raw | replace('07:', '7:') | replace('08:', '8:') | replace('09:', '9:') | replace('00:', '0:') | replace('01:', '1:') | replace('02:', '2:') | replace('03:', '3:') | replace('04:', '4:') | replace('05:', '5:') | replace('06:', '6:') -%}
+              {%- set eta_raw = sensor.attributes.arrive_time | default('') | replace('am', '') | replace('pm', '') -%}
+              {%- set eta = eta_raw | replace('07:', '7:') | replace('08:', '8:') | replace('09:', '9:') | replace('00:', '0:') | replace('01:', '1:') | replace('02:', '2:') | replace('03:', '3:') | replace('04:', '4:') | replace('05:', '5:') | replace('06:', '6:') -%}
+              {%- set legs = sensor.attributes.legs | default([]) -%}
+              {%- set non_walk_legs = legs | rejectattr('type', 'equalto', 'walk') | list -%}
+              {%- if non_walk_legs | length > 0 -%}
+                {%- set first_leg = non_walk_legs[0] -%}
+                {%- set last_leg = non_walk_legs[-1] -%}
+                {%- if first_leg.from_time and last_leg.to_time -%}
+                  {%- set first_time_raw = first_leg.from_time | replace('am', '') | replace('pm', '') -%}
+                  {%- set first_time = first_time_raw | replace('07:', '7:') | replace('08:', '8:') | replace('09:', '9:') | replace('00:', '0:') | replace('01:', '1:') | replace('02:', '2:') | replace('03:', '3:') | replace('04:', '4:') | replace('05:', '5:') | replace('06:', '6:') -%}
+                  {%- set last_time_raw = last_leg.to_time | replace('am', '') | replace('pm', '') -%}
+                  {%- set last_time = last_time_raw | replace('07:', '7:') | replace('08:', '8:') | replace('09:', '9:') | replace('00:', '0:') | replace('01:', '1:') | replace('02:', '2:') | replace('03:', '3:') | replace('04:', '4:') | replace('05:', '5:') | replace('06:', '6:') -%}
+                  {%- set service_code = first_leg.service_code | default('') -%}
+                  {%- if first_match -%}
+                    {%- if service_code -%}
+                      {{- service_code -}} {{- ' - ' -}} {{- etd -}}/{{- first_time -}} {{- ' > ' -}} {{- last_time -}}/{{- eta -}}
+                    {%- else -%}
+                      {{- etd -}}/{{- first_time -}} {{- ' > ' -}} {{- last_time -}}/{{- eta -}}
+                    {%- endif -%}
+                    {%- set first_match = false -%}
+                  {%- else -%}
+                    {%- if service_code -%}
+                      {{ ' | ' }}{{ service_code }} {{ ' - ' }}{{ etd }}/{{ first_time }} {{ ' > ' }} {{ last_time }}/{{ eta }}
+                    {%- else -%}
+                      {{ ' | ' }}{{ etd }}/{{ first_time }} {{ ' > ' }} {{ last_time }}/{{ eta }}
+                    {%- endif -%}
+                  {%- endif -%}
+                {%- else -%}
+                  {%- if first_match -%}
+                    {{- etd -}} {{- ' > ' -}} {{- eta -}}
+                    {%- set first_match = false -%}
+                  {%- else -%}
+                    {{ ' | ' }}{{ etd }} {{ ' > ' }} {{ eta }}
+                  {%- endif -%}
+                {%- endif -%}
+              {%- else -%}
+                {%- if first_match -%}
+                  {{- etd -}} {{- ' > ' -}} {{- eta -}}
+                  {%- set first_match = false -%}
+                {%- else -%}
+                  {{ ' | ' }}{{ etd }} {{ ' > ' }} {{ eta }}
+                {%- endif -%}
+              {%- endif -%}
+              {{ ' … ' }}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- else -%}
+          No journey options available.
+        {%- endif -%}
+      notification_id: transperth_journey_options
+    action: persistent_notification.create
+  - data:
+      title: >-
+        {% set all_sensors = states.sensor | selectattr('entity_id', 'match',
+        'sensor.transperth.*') | list %} {% set available_sensors = all_sensors
+        | selectattr('state', 'ne', 'unavailable') | selectattr('state', 'ne',
+        'unknown') | selectattr('state', 'ne', 'None') | selectattr('state',
+        'ne', '') | list %} {% set preferred_route_name = 'Work to Home' %} {%
+        if available_sensors | length > 0 %}
+          {% set preferred_route_sensors = available_sensors | selectattr('attributes.route_name', 'eq', preferred_route_name) | list %}
+          {% if preferred_route_sensors | length > 0 %}
+            {% set first_sensor = preferred_route_sensors[0] %}
+          {% else %}
+            {% set first_sensor = available_sensors[0] %}
+          {% endif %}
+          🚌 {{ first_sensor.attributes.route_name }}
         {% else %}
-          No journey options available at this time.
+          🚌 Transperth Journey Options
         {% endif %}
+      message: >-
+        {%- set all_sensors = states.sensor | selectattr('entity_id', 'match',
+        'sensor.transperth.*') | list -%} {%- set available_sensors =
+        all_sensors | selectattr('state', 'ne', 'unavailable') |
+        selectattr('state', 'ne', 'unknown') | selectattr('state', 'ne', 'None')
+        | selectattr('state', 'ne', '') | list -%} {%- set target_device_id =
+        'c229a54a8f926269ddd29b3e0db2a0ce' -%} {%- set target_entities =
+        device_entities(target_device_id) | default([]) -%} {%- set
+        device_filtered = [] -%} {%- for sensor in available_sensors -%}
+          {%- if sensor.entity_id in target_entities -%}
+            {%- set device_filtered = device_filtered + [sensor] -%}
+          {%- endif -%}
+        {%- endfor -%} {%- if device_filtered | length > 0 -%}
+          {%- set available_sensors = device_filtered -%}
+        {%- endif -%} {%- set target_device_id =
+        'c229a54a8f926269ddd29b3e0db2a0ce' -%} {%- set target_entities =
+        device_entities(target_device_id) | default([]) -%} {%- set
+        device_filtered = [] -%} {%- for sensor in available_sensors -%}
+          {%- if sensor.entity_id in target_entities -%}
+            {%- set device_filtered = device_filtered + [sensor] -%}
+          {%- endif -%}
+        {%- endfor -%} {%- if device_filtered | length > 0 -%}
+          {%- set available_sensors = device_filtered -%}
+        {%- endif -%} {%- set preferred_route_name = 'Work to Home' -%} {%- if
+        available_sensors | length > 0 -%}
+          {%- set preferred_route_sensors = available_sensors | selectattr('attributes.route_name', 'eq', preferred_route_name) | list -%}
+          {%- if preferred_route_sensors | length > 0 -%}
+            {%- set first_sensor = preferred_route_sensors[0] -%}
+          {%- else -%}
+            {%- set first_sensor = available_sensors[0] -%}
+          {%- endif -%}
+          {%- set target_route = first_sensor.attributes.route_name -%}
+          {%- set sorted_sensors = available_sensors | sort(attribute='attributes.option_index') | list -%}
+          {%- set first_match = true -%}
+          {%- for sensor in sorted_sensors -%}
+            {%- if sensor.attributes.route_name == target_route -%}
+              {%- set etd_raw = sensor.attributes.leave_time | default('') | replace('am', '') | replace('pm', '') -%}
+              {%- set etd = etd_raw | replace('07:', '7:') | replace('08:', '8:') | replace('09:', '9:') | replace('00:', '0:') | replace('01:', '1:') | replace('02:', '2:') | replace('03:', '3:') | replace('04:', '4:') | replace('05:', '5:') | replace('06:', '6:') -%}
+              {%- set eta_raw = sensor.attributes.arrive_time | default('') | replace('am', '') | replace('pm', '') -%}
+              {%- set eta = eta_raw | replace('07:', '7:') | replace('08:', '8:') | replace('09:', '9:') | replace('00:', '0:') | replace('01:', '1:') | replace('02:', '2:') | replace('03:', '3:') | replace('04:', '4:') | replace('05:', '5:') | replace('06:', '6:') -%}
+              {%- set legs = sensor.attributes.legs | default([]) -%}
+              {%- set non_walk_legs = legs | rejectattr('type', 'equalto', 'walk') | list -%}
+              {%- if non_walk_legs | length > 0 -%}
+                {%- set first_leg = non_walk_legs[0] -%}
+                {%- set last_leg = non_walk_legs[-1] -%}
+                {%- if first_leg.from_time and last_leg.to_time -%}
+                  {%- set first_time_raw = first_leg.from_time | replace('am', '') | replace('pm', '') -%}
+                  {%- set first_time = first_time_raw | replace('07:', '7:') | replace('08:', '8:') | replace('09:', '9:') | replace('00:', '0:') | replace('01:', '1:') | replace('02:', '2:') | replace('03:', '3:') | replace('04:', '4:') | replace('05:', '5:') | replace('06:', '6:') -%}
+                  {%- set last_time_raw = last_leg.to_time | replace('am', '') | replace('pm', '') -%}
+                  {%- set last_time = last_time_raw | replace('07:', '7:') | replace('08:', '8:') | replace('09:', '9:') | replace('00:', '0:') | replace('01:', '1:') | replace('02:', '2:') | replace('03:', '3:') | replace('04:', '4:') | replace('05:', '5:') | replace('06:', '6:') -%}
+                  {%- set service_code = first_leg.service_code | default('') -%}
+                  {%- if first_match -%}
+                    {%- if service_code -%}
+                      {{- service_code -}} {{- ' - ' -}} {{- etd -}}/{{- first_time -}} {{- ' > ' -}} {{- last_time -}}/{{- eta -}}
+                    {%- else -%}
+                      {{- etd -}}/{{- first_time -}} {{- ' > ' -}} {{- last_time -}}/{{- eta -}}
+                    {%- endif -%}
+                    {%- set first_match = false -%}
+                  {%- else -%}
+                    {%- if service_code -%}
+                      {{ ' | ' }}{{ service_code }} {{ ' - ' }}{{ etd }}/{{ first_time }} {{ ' > ' }} {{ last_time }}/{{ eta }}
+                    {%- else -%}
+                      {{ ' | ' }}{{ etd }}/{{ first_time }} {{ ' > ' }} {{ last_time }}/{{ eta }}
+                    {%- endif -%}
+                  {%- endif -%}
+                {%- else -%}
+                  {%- if first_match -%}
+                    {{- etd -}} {{- ' > ' -}} {{- eta -}}
+                    {%- set first_match = false -%}
+                  {%- else -%}
+                    {{ ' | ' }}{{ etd }} {{ ' > ' }} {{ eta }}
+                  {%- endif -%}
+                {%- endif -%}
+              {%- else -%}
+                {%- if first_match -%}
+                  {{- etd -}} {{- ' > ' -}} {{- eta -}}
+                  {%- set first_match = false -%}
+                {%- else -%}
+                  {{ ' | ' }}{{ etd }} {{ ' > ' }} {{ eta }}
+                {%- endif -%}
+              {%- endif -%}
+              {{ ' … ' }}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- else -%}
+          No journey options available.
+        {%- endif -%}
       data:
         push:
           sound:
-            name: "default"
+            name: default
             critical: 0
-            volume: 1.0
-          thread-id: "transperth-journey-options"
-          category: "TRANSPERTH"
-        url: "homeassistant://navigate/config/devices/device/c229a54a8f926269ddd29b3e0db2a0ce"
+            volume: 1
+          thread-id: transperth-journey-options
+          category: TRANSPERTH
+        url: >-
+          homeassistant://navigate/config/devices/device/c229a54a8f926269ddd29b3e0db2a0ce
         actions:
-          - action: "URI"
-            title: "View Journey Options"
-            uri: "homeassistant://navigate/config/devices/device/c229a54a8f926269ddd29b3e0db2a0ce"
-          - action: "DISMISS"
-            title: "Dismiss"
-
+          - action: URI
+            title: View Journey Options
+            uri: >-
+              homeassistant://navigate/config/devices/device/c229a54a8f926269ddd29b3e0db2a0ce
+          - action: DISMISS
+            title: Dismiss
+    action: notify.mobile_app_tom_b_iphone_personal
+  - data:
+      title: >-
+        {% set all_sensors = states.sensor | selectattr('entity_id', 'match',
+        'sensor.transperth.*') | list %} {% set available_sensors = all_sensors
+        | selectattr('state', 'ne', 'unavailable') | selectattr('state', 'ne',
+        'unknown') | selectattr('state', 'ne', 'None') | selectattr('state',
+        'ne', '') | list %} {% set preferred_route_name = 'Work to Home' %} {%
+        if available_sensors | length > 0 %}
+          {% set preferred_route_sensors = available_sensors | selectattr('attributes.route_name', 'eq', preferred_route_name) | list %}
+          {% if preferred_route_sensors | length > 0 %}
+            {% set first_sensor = preferred_route_sensors[0] %}
+          {% else %}
+            {% set first_sensor = available_sensors[0] %}
+          {% endif %}
+          🚌 {{ first_sensor.attributes.route_name }}
+        {% else %}
+          🚌 Transperth Journey Options
+        {% endif %}
+      message: >-
+        {%- set all_sensors = states.sensor | selectattr('entity_id', 'match',
+        'sensor.transperth.*') | list -%} {%- set available_sensors =
+        all_sensors | selectattr('state', 'ne', 'unavailable') |
+        selectattr('state', 'ne', 'unknown') | selectattr('state', 'ne', 'None')
+        | selectattr('state', 'ne', '') | list -%} {%- set target_device_id =
+        'c229a54a8f926269ddd29b3e0db2a0ce' -%} {%- set target_entities =
+        device_entities(target_device_id) | default([]) -%} {%- set
+        device_filtered = [] -%} {%- for sensor in available_sensors -%}
+          {%- if sensor.entity_id in target_entities -%}
+            {%- set device_filtered = device_filtered + [sensor] -%}
+          {%- endif -%}
+        {%- endfor -%} {%- if device_filtered | length > 0 -%}
+          {%- set available_sensors = device_filtered -%}
+        {%- endif -%} {%- set target_device_id =
+        'c229a54a8f926269ddd29b3e0db2a0ce' -%} {%- set target_entities =
+        device_entities(target_device_id) | default([]) -%} {%- set
+        device_filtered = [] -%} {%- for sensor in available_sensors -%}
+          {%- if sensor.entity_id in target_entities -%}
+            {%- set device_filtered = device_filtered + [sensor] -%}
+          {%- endif -%}
+        {%- endfor -%} {%- if device_filtered | length > 0 -%}
+          {%- set available_sensors = device_filtered -%}
+        {%- endif -%} {%- set preferred_route_name = 'Work to Home' -%} {%- if
+        available_sensors | length > 0 -%}
+          {%- set preferred_route_sensors = available_sensors | selectattr('attributes.route_name', 'eq', preferred_route_name) | list -%}
+          {%- if preferred_route_sensors | length > 0 -%}
+            {%- set first_sensor = preferred_route_sensors[0] -%}
+          {%- else -%}
+            {%- set first_sensor = available_sensors[0] -%}
+          {%- endif -%}
+          {%- set target_route = first_sensor.attributes.route_name -%}
+          {%- set sorted_sensors = available_sensors | sort(attribute='attributes.option_index') | list -%}
+          {%- set first_match = true -%}
+          {%- for sensor in sorted_sensors -%}
+            {%- if sensor.attributes.route_name == target_route -%}
+              {%- set etd_raw = sensor.attributes.leave_time | default('') | replace('am', '') | replace('pm', '') -%}
+              {%- set etd = etd_raw | replace('07:', '7:') | replace('08:', '8:') | replace('09:', '9:') | replace('00:', '0:') | replace('01:', '1:') | replace('02:', '2:') | replace('03:', '3:') | replace('04:', '4:') | replace('05:', '5:') | replace('06:', '6:') -%}
+              {%- set eta_raw = sensor.attributes.arrive_time | default('') | replace('am', '') | replace('pm', '') -%}
+              {%- set eta = eta_raw | replace('07:', '7:') | replace('08:', '8:') | replace('09:', '9:') | replace('00:', '0:') | replace('01:', '1:') | replace('02:', '2:') | replace('03:', '3:') | replace('04:', '4:') | replace('05:', '5:') | replace('06:', '6:') -%}
+              {%- set legs = sensor.attributes.legs | default([]) -%}
+              {%- set non_walk_legs = legs | rejectattr('type', 'equalto', 'walk') | list -%}
+              {%- if non_walk_legs | length > 0 -%}
+                {%- set first_leg = non_walk_legs[0] -%}
+                {%- set last_leg = non_walk_legs[-1] -%}
+                {%- if first_leg.from_time and last_leg.to_time -%}
+                  {%- set first_time_raw = first_leg.from_time | replace('am', '') | replace('pm', '') -%}
+                  {%- set first_time = first_time_raw | replace('07:', '7:') | replace('08:', '8:') | replace('09:', '9:') | replace('00:', '0:') | replace('01:', '1:') | replace('02:', '2:') | replace('03:', '3:') | replace('04:', '4:') | replace('05:', '5:') | replace('06:', '6:') -%}
+                  {%- set last_time_raw = last_leg.to_time | replace('am', '') | replace('pm', '') -%}
+                  {%- set last_time = last_time_raw | replace('07:', '7:') | replace('08:', '8:') | replace('09:', '9:') | replace('00:', '0:') | replace('01:', '1:') | replace('02:', '2:') | replace('03:', '3:') | replace('04:', '4:') | replace('05:', '5:') | replace('06:', '6:') -%}
+                  {%- set service_code = first_leg.service_code | default('') -%}
+                  {%- if first_match -%}
+                    {%- if service_code -%}
+                      {{- service_code -}} {{- ' - ' -}} {{- etd -}}/{{- first_time -}} {{- ' > ' -}} {{- last_time -}}/{{- eta -}}
+                    {%- else -%}
+                      {{- etd -}}/{{- first_time -}} {{- ' > ' -}} {{- last_time -}}/{{- eta -}}
+                    {%- endif -%}
+                    {%- set first_match = false -%}
+                  {%- else -%}
+                    {%- if service_code -%}
+                      {{ ' | ' }}{{ service_code }} {{ ' - ' }}{{ etd }}/{{ first_time }} {{ ' > ' }} {{ last_time }}/{{ eta }}
+                    {%- else -%}
+                      {{ ' | ' }}{{ etd }}/{{ first_time }} {{ ' > ' }} {{ last_time }}/{{ eta }}
+                    {%- endif -%}
+                  {%- endif -%}
+                {%- else -%}
+                  {%- if first_match -%}
+                    {{- etd -}} {{- ' > ' -}} {{- eta -}}
+                    {%- set first_match = false -%}
+                  {%- else -%}
+                    {{ ' | ' }}{{ etd }} {{ ' > ' }} {{ eta }}
+                  {%- endif -%}
+                {%- endif -%}
+              {%- else -%}
+                {%- if first_match -%}
+                  {{- etd -}} {{- ' > ' -}} {{- eta -}}
+                  {%- set first_match = false -%}
+                {%- else -%}
+                  {{ ' | ' }}{{ etd }} {{ ' > ' }} {{ eta }}
+                {%- endif -%}
+              {%- endif -%}
+              {{ ' … ' }}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- else -%}
+          No journey options available.
+        {%- endif -%}
+      data:
+        push:
+          sound:
+            name: default
+            critical: 0
+            volume: 1
+          thread-id: transperth-journey-options
+          category: TRANSPERTH
+        url: >-
+          homeassistant://navigate/config/devices/device/c229a54a8f926269ddd29b3e0db2a0ce
+        actions:
+          - action: URI
+            title: View Journey Options
+            uri: >-
+              homeassistant://navigate/config/devices/device/c229a54a8f926269ddd29b3e0db2a0ce
+          - action: DISMISS
+            title: Dismiss
+    action: notify.mobile_app_stephanie_s_iphone
