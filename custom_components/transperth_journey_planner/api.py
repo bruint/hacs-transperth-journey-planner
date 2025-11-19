@@ -108,27 +108,43 @@ class TransperthAPI:
         # Build query parameters - ensure all required fields are present
         params: dict[str, Any] = {}
         
-        # Required parameters
-        if from_location:
-            params["from"] = from_location
-        if from_type:
-            params["fromtype"] = from_type
-        if from_position:
-            params["fromposition"] = from_position
-        if from_locality:
-            params["fromlocality"] = from_locality
-        if to_location:
-            params["to"] = to_location
-        if to_type:
-            params["totype"] = to_type
-        if to_position:
-            params["toposition"] = to_position
-        if to_locality:
-            params["tolocality"] = to_locality
-        if date:
-            params["date"] = date
-        if time:
-            params["time"] = time
+        # Log input values for debugging
+        _LOGGER.warning("API called with: from_location='%s', to_location='%s', from_position='%s', to_position='%s'", 
+                       from_location, to_location, from_position, to_position)
+        
+        # Required parameters - check for empty strings too
+        if from_location and from_location.strip():
+            params["from"] = from_location.strip()
+        else:
+            _LOGGER.error("from_location is empty or None: '%s'", from_location)
+            
+        if from_type and from_type.strip():
+            params["fromtype"] = from_type.strip()
+        if from_position and from_position.strip():
+            params["fromposition"] = from_position.strip()
+        else:
+            _LOGGER.error("from_position is empty or None: '%s'", from_position)
+            
+        if from_locality and from_locality.strip():
+            params["fromlocality"] = from_locality.strip()
+        if to_location and to_location.strip():
+            params["to"] = to_location.strip()
+        else:
+            _LOGGER.error("to_location is empty or None: '%s'", to_location)
+            
+        if to_type and to_type.strip():
+            params["totype"] = to_type.strip()
+        if to_position and to_position.strip():
+            params["toposition"] = to_position.strip()
+        else:
+            _LOGGER.error("to_position is empty or None: '%s'", to_position)
+            
+        if to_locality and to_locality.strip():
+            params["tolocality"] = to_locality.strip()
+        if date and date.strip():
+            params["date"] = date.strip()
+        if time and time.strip():
+            params["time"] = time.strip()
 
         # Add departure option
         if departure_option == "leave_after":
@@ -205,8 +221,10 @@ class TransperthAPI:
                 _LOGGER.debug("Could not visit main page (non-critical): %s", e)
             
             # Make request - ensure proper URL encoding
-            _LOGGER.debug("Requesting journey options with params: %s", params)
-            _LOGGER.debug("Full URL will be: %s?%s", JOURNEY_PLANNER_URL, "&".join([f"{k}={v}" for k, v in params.items()]))
+            _LOGGER.warning("Requesting journey options with params: %s", params)
+            # Build URL manually to see what's being sent
+            param_string = "&".join([f"{k}={v}" for k, v in params.items()])
+            _LOGGER.warning("Full URL will be: %s?%s", JOURNEY_PLANNER_URL, param_string)
             
             # Add Referer header to make request look more legitimate
             headers = {
@@ -221,8 +239,12 @@ class TransperthAPI:
             )
             response.raise_for_status()
             
-            _LOGGER.debug("Response status: %s, URL: %s", response.status_code, response.url)
-            _LOGGER.debug("Response headers: %s", dict(response.headers))
+            _LOGGER.warning("Response status: %s, URL: %s", response.status_code, response.url)
+            # Check if parameters are in the actual URL
+            url_str = str(response.url)
+            _LOGGER.warning("URL contains 'from=': %s", "from=" in url_str)
+            _LOGGER.warning("URL contains 'to=': %s", "to=" in url_str)
+            _LOGGER.warning("URL contains 'bus=': %s", "bus=" in url_str)
 
             # Parse HTML
             soup = BeautifulSoup(response.text, "lxml")
