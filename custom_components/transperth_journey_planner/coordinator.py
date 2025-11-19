@@ -117,6 +117,21 @@ class TransperthJourneyCoordinator(DataUpdateCoordinator):
     def _get_default_time(self) -> str:
         """Get default time in HH:MM format."""
         return datetime.now().strftime("%H:%M")
+    
+    def _resolve_date(self, date_str: str) -> str:
+        """Resolve date string - handle 'today', 'tomorrow', or actual date."""
+        if not date_str:
+            return self._get_default_date()
+        
+        date_lower = date_str.lower()
+        if date_lower == "today":
+            return self._get_default_date()
+        elif date_lower == "tomorrow":
+            tomorrow = datetime.now() + timedelta(days=1)
+            return tomorrow.strftime("%Y-%m-%d")
+        else:
+            # Assume it's already in YYYY-MM-DD format
+            return date_str
 
     async def async_update_data(self) -> TransperthJourneyData:
         """Fetch data from API endpoint.
@@ -129,8 +144,8 @@ class TransperthJourneyCoordinator(DataUpdateCoordinator):
         for route_name, route_config in self.routes.items():
             try:
                 _LOGGER.debug("Fetching journey data for route: %s", route_name)
-                # Use defaults if date/time not provided
-                date = route_config.date or self._get_default_date()
+                # Use defaults if date/time not provided, and resolve dynamic dates
+                date = self._resolve_date(route_config.date) if route_config.date else self._get_default_date()
                 time = route_config.time or self._get_default_time()
                 
                 journey_data = await self.hass.async_add_executor_job(

@@ -3,20 +3,56 @@
     "step": {
       "user": {
         "title": "Transperth Journey Planner",
-        "description": "Configure your journey routes"
+        "description": "Choose how you want to configure your journey routes",
+        "data": {
+          "config_method": "Configuration Method"
+        }
+      },
+      "quick_config": {
+        "title": "Quick Config from URL",
+        "description": "Paste a Transperth Journey Planner URL to automatically fill in the route details.",
+        "data": {
+          "journey_url": "Journey Planner URL"
+        }
       },
       "add_route": {
         "title": "Add Journey Route",
-        "description": "Configure a journey route"
+        "description": "Configure a journey route",
+        "data": {
+          "route_name": "Route Name",
+          "from": "From Location",
+          "fromtype": "From Location Type",
+          "fromposition": "From Coordinates (lat,lon)",
+          "fromlocality": "From Locality/Suburb",
+          "to": "To Location",
+          "totype": "To Location Type",
+          "toposition": "To Coordinates (lat,lon)",
+          "tolocality": "To Locality/Suburb",
+          "date_selection": "Date",
+          "custom_date": "Custom Date (YYYY-MM-DD)",
+          "time": "Time (HH:MM)",
+          "departure_option": "Departure Option",
+          "transport_bus": "Include Bus",
+          "transport_train": "Include Train",
+          "transport_ferry": "Include Ferry",
+          "transport_school_bus": "Include School Bus",
+          "walk_speed": "Walk Speed",
+          "max_connections": "Max Connections",
+          "max_walking_distance": "Max Walking Distance"
+        }
       },
       "add_another": {
         "title": "Add Another Route?",
-        "description": "You have configured {route_count} route(s): {routes}\n\nWould you like to add another route?"
+        "description": "You have configured {route_count} route(s): {routes}\n\nWould you like to add another route?",
+        "data": {
+          "add_another": "Add Another Route"
+        }
       }
     },
     "error": {
       "required": "This field is required",
-      "duplicate": "A route with this name already exists"
+      "duplicate": "A route with this name already exists",
+      "invalid_url": "Invalid Journey Planner URL. Please check the URL and try again."
     },
     "abort": {
       "already_configured": "Integration is already configured"
@@ -26,7 +62,10 @@
     "step": {
       "init": {
         "title": "Transperth Journey Planner Options",
-        "description": "Configure update interval"
+        "description": "Configure update interval",
+        "data": {
+          "scan_interval": "Scan Interval (seconds)"
+        }
       }
     }
   }
