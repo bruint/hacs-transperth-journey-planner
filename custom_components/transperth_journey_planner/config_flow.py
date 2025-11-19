@@ -93,9 +93,13 @@ class TransperthJourneyPlannerConfigFlow(ConfigFlow, domain=DOMAIN):
                         CONF_DEPARTURE_OPTION, "leave_after"
                     ),
                     CONF_TRANSPORT_OPTIONS: (
-                        user_input[CONF_TRANSPORT_OPTIONS]
-                        if isinstance(user_input.get(CONF_TRANSPORT_OPTIONS), list)
-                        else ["bus", "train"]
+                        [
+                            opt
+                            for opt in TRANSPORT_OPTIONS
+                            if user_input.get(f"transport_{opt}", False)
+                        ]
+                        if any(user_input.get(f"transport_{opt}", False) for opt in TRANSPORT_OPTIONS)
+                        else ["bus", "train"]  # Default to bus and train if none selected
                     ),
                     CONF_WALK_SPEED: user_input.get(CONF_WALK_SPEED, "normal"),
                     CONF_MAX_CONNECTIONS: (
@@ -128,9 +132,10 @@ class TransperthJourneyPlannerConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Optional(
                     CONF_DEPARTURE_OPTION, default="leave_after"
                 ): vol.In(DEPARTURE_OPTIONS),
-                vol.Optional(
-                    CONF_TRANSPORT_OPTIONS, default=["bus", "train"]
-                ): [vol.In(TRANSPORT_OPTIONS)],
+                vol.Optional("transport_bus", default=True): bool,
+                vol.Optional("transport_train", default=True): bool,
+                vol.Optional("transport_ferry", default=False): bool,
+                vol.Optional("transport_school_bus", default=False): bool,
                 vol.Optional(CONF_WALK_SPEED, default="normal"): vol.In(WALK_SPEEDS),
                 vol.Optional(CONF_MAX_CONNECTIONS, default=""): str,
                 vol.Optional(CONF_MAX_WALKING_DISTANCE, default=""): str,
